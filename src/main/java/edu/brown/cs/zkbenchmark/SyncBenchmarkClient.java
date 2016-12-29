@@ -31,14 +31,25 @@ public class SyncBenchmarkClient extends BenchmarkClient {
 			LOG.error("Error while submitting requests", e);
 		}
 	}
-		
+
+    class OpTime {
+        public long startTime;
+        public long endTime;
+        public OpTime(long s, long e) {
+            startTime = s;
+            endTime = e;
+        }
+    };
+
 	protected void submitWrapped(int n, TestType type) throws Exception {
 		_syncfin = false;
 		_totalOps = _zkBenchmark.getCurrentTotalOps();
 		byte data[];
 
+                long testStart = System.nanoTime();
+                OpTime[] latencies = new OpTime[1000 * 1000];
 		for (int i = 0; i < _totalOps.get(); i++) {
-			double submitTime = ((double)System.nanoTime() - _zkBenchmark.getStartTime())/1000000000.0;
+			long submitTime = System.nanoTime();
 
 			switch (type) {
 				case READ:
@@ -78,14 +89,37 @@ public class SyncBenchmarkClient extends BenchmarkClient {
 					}
 			}
 
-			recordElapsedInterval(new Double(submitTime));
+                        long endTime = System.nanoTime();
+                        latencies[i] = new OpTime(submitTime, endTime);
 			_count++;
 			_zkBenchmark.incrementFinished();
 
 			if (_syncfin)
 				break;
 		}
-		
+                long duration = System.nanoTime() - testStart;
+                int durationSecs = (int)(duration / (1000 * 1000 * 1000)) + 1;
+                long[] avgLatencies = new long[durationSecs];
+                long[] binSizes = new long[durationSecs];
+                for (int i = 0; i < durationSecs; i++) {
+                    avgLatencies[i] = 0;
+                    binSizes[i] = 0;
+                }
+                for (int i = 0; i < _count; i++) {
+                    int sec = (int)((latencies[i].startTime - testStart) / (1000 * 1000 * 1000));
+                    avgLatencies[sec] += (latencies[i].endTime - latencies[i].startTime) / 1000; // micros
+                    binSizes[sec]++;
+                }
+                for (int i = 0; i < avgLatencies.length; i++) {
+                    long res = binSizes[i] == 0 ? 0 : avgLatencies[i]/binSizes[i];
+                    try {
+                        _latenciesFile.write(Integer.toString(i) + " " + res + "\n");
+                    } catch (IOException e) {
+                        LOG.error("Exceptions while writing to file", e);
+                    }
+
+                }
+
 	}
 	
 	@Override

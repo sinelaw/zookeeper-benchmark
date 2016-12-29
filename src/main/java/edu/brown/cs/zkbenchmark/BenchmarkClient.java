@@ -172,19 +172,17 @@ public abstract class BenchmarkClient implements Runnable {
 
 	void recordEvent(CuratorEvent event) {
 		Double submitTime = (Double) event.getContext();
-		recordElapsedInterval(submitTime);
+		double relEndTime = ((double)System.nanoTime() - _zkBenchmark.getStartTime())/1000000000.0;
+		recordElapsedInterval(submitTime, relEndTime);
 	}
 
-
-	void recordElapsedInterval(Double startTime) {
-		double endtime = ((double)System.nanoTime() - _zkBenchmark.getStartTime())/1000000000.0;
-
-		try {
-			_latenciesFile.write(startTime.toString() + " " + Double.toString(endtime) + "\n");
-		} catch (IOException e) {
-			LOG.error("Exceptions while writing to file", e);
-		}
-	}
+    void recordElapsedInterval(Double start, Double end) {
+        try {
+            _latenciesFile.write(start.toString() + " " + Double.toString(end-start) + "\n");
+        } catch (IOException e) {
+            LOG.error("Exceptions while writing to file", e);
+        }
+    }
 
 	/* Send a command directly to the ZooKeeper server */
 	void zkAdminCommand(String cmd) {
