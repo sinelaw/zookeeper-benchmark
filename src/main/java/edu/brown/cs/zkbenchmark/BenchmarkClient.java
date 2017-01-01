@@ -28,7 +28,6 @@ public class BenchmarkClient implements Callable<RunResult> {
     protected ZooKeeperBenchmark _zkBenchmark;
     protected String _host; // the host this client is connecting to
     protected CuratorFramework _client; // the actual client
-    protected int _attempts;
     protected String _path;
     protected int _id;
     protected int _count;
@@ -44,14 +43,13 @@ public class BenchmarkClient implements Callable<RunResult> {
 
 
     public BenchmarkClient(ZooKeeperBenchmark zkBenchmark, String host, String namespace,
-                           int attempts, int id) throws IOException {
+                           int id) throws IOException {
         _zkBenchmark = zkBenchmark;
         _host = host;
         _client = CuratorFrameworkFactory.builder()
             .connectString(_host).namespace(namespace)
             .retryPolicy(new RetryNTimes(Integer.MAX_VALUE,1000))
             .connectionTimeoutMs(5000).build();
-        _attempts = attempts;
         _id = id;
         _path = "/client"+id;
         _timer = new Timer();
@@ -98,7 +96,7 @@ public class BenchmarkClient implements Callable<RunResult> {
         // periodically in case we want to record periodic statistics
         // Submit the requests!
 
-        return submit(_attempts);
+        return submit();
 
 
         // try {
@@ -207,9 +205,9 @@ public class BenchmarkClient implements Callable<RunResult> {
         return _zkBenchmark;
     }
 
-    protected RunResult submit(int n) {
+    protected RunResult submit() {
         try {
-            return submitWrapped(n);
+            return submitWrapped();
         } catch (Exception e) {
             // What can you do? for some reason
             // com.netflix.curator.framework.api.Pathable.forPath() throws Exception
@@ -234,7 +232,7 @@ public class BenchmarkClient implements Callable<RunResult> {
         }
     }
 
-    protected RunResult submitWrapped(int n) throws Exception {
+    protected RunResult submitWrapped() throws Exception {
         byte data[];
 
         RunResult result = new RunResult();

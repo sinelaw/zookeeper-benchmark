@@ -85,34 +85,14 @@ public class ZooKeeperBenchmark {
 
         for (int i = 0; i < _clients.length; i++) {
             int server_idx = i % serverList.size();
-            _clients[i] = new BenchmarkClient(this, serverList.get(server_idx), "/zkTest", avgOps, i);
+            _clients[i] = new BenchmarkClient(this, serverList.get(server_idx), "/zkTest", i);
         }
 
     }
 
     public void runBenchmark() {
 
-        /* Read requests are done by zookeeper extremely
-         * quickly compared with write requests. If the time
-         * interval and threshold are not chosen appropriately,
-         * it could happen that when the timer awakes, all requests
-         * have already been finished. In this case, the output
-         * of read test doesn't reflect the actual rate of
-         * read requests. */
-        doTest("different znode write", false);
-
-        /* In the test, node creation and deletion tests are
-         * done by creating a lot of nodes at first and then
-         * deleting them. Since both of these two tests run
-         * for a certain time, there is no guarantee that which
-         * requests is more than the other. If there are more
-         * delete requests than create requests, the extra delete
-         * requests would end up not actually deleting anything.
-         * Though these requests are sent and processed by
-         * zookeeper server anyway, this could still be an issue.*/
-        // doTest(TestType.DELETE, "znode delete");
-
-        LOG.info("Tests completed, now cleaning-up");
+        doTest();
 
         for (int i = 0; i < _clients.length; i++) {
             _clients[i].doCleaning();
@@ -123,23 +103,18 @@ public class ZooKeeperBenchmark {
 
     /* This is where each individual test starts */
 
-    public void doTest(String description, Boolean singleClient) {
-        System.out.print("Running " + description + " benchmark... ");
-
-        // Start the testing clients!
-
+    public void doTest() {
         _clients[0].doCreate();
 
         System.out.print("Runnning " + _clients.length + " clients\n");
         ExecutorService executor = Executors.newFixedThreadPool(_clients.length, new DaemonThreadFactory());
 
-        _barrier = new CyclicBarrier(singleClient ? 2 : _clients.length+1);
+        _barrier = new CyclicBarrier(_clients.length+1);
 
         for (int i = 0; i < _clients.length; i++) {
             FutureTask<RunResult> tmp = new FutureTask<RunResult>(_clients[i]);
             _running.put(new Integer(i), tmp);
             executor.execute(tmp);
-            if (singleClient) break;
         }
 
         System.out.print("Clients started\n");
@@ -179,25 +154,22 @@ public class ZooKeeperBenchmark {
             }
         }
 
-        long endTime = System.nanoTime();
-
         System.out.print("client,duration,ops\n");
+        double totalThroughputEst = 0;
         for (int i = 0; i < results.length; i++) {
             RunResult result = results[i];
+            totalThroughputEst += (1.0*result.numOps) / (result.getDurationNanos()/1000000000.0);
             System.out.print("client-" + i + "," + result.getDurationNanos() + "," + result.numOps + "\n");
         }
 
-        double time = (endTime - _startCpuTime) / 1000000000.0;
-
         executor.shutdown();
 
-        LOG.info("Test finished, time elapsed (sec): " + time +
-                 " operations: " + _totalOps + " avg rate: " +
-                 _totalOps/time);
+        LOG.info("Test finished: operations: " + _totalOps + " avg rate: " +
+                 totalThroughputEst);
 
         System.out.println("\n");
         System.out.println("clients,keys,throughput\n");
-        System.out.println("" + getClients() + ","  + getKeys() + "," + _totalOps/time);
+        System.out.println("" + getClients() + ","  + getKeys() + "," + totalThroughputEst);
     }
 
     int getClients() {
