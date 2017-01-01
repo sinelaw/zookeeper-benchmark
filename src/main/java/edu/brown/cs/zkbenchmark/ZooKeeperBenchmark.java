@@ -238,7 +238,8 @@ public class ZooKeeperBenchmark {
                  " operations: " + _totalOps + " avg rate: " +
                  _totalOps/time);
 
-        System.out.println("done");
+        System.out.println("clients,keys,throughput\n");
+        System.out.println("" + getClients() + ","  + getKeys() + "," + _totalOps/time);
     }
 
     /* return the max time consumed by each thread */
