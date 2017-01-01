@@ -44,7 +44,7 @@ public class ZooKeeperBenchmark {
     private String _data;
     private BufferedWriter _rateFile;
     private CyclicBarrier _barrier;
-    private long _keys;
+    private int _keys;
 
     enum TestType {
         READ, SETSINGLE, SETMULTI, CREATE, DELETE, CLEANING, UNDEFINED
@@ -262,7 +262,7 @@ public class ZooKeeperBenchmark {
         return _totalOps;
     }
 
-    long getKeys() {
+    int getKeys() {
         return _keys;
     }
 

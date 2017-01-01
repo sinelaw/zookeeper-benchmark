@@ -65,7 +65,7 @@ public class SyncBenchmarkClient extends BenchmarkClient {
                 break;
 
             case SETMULTI:
-                long key = random.nextInt() % _zkBenchmark.getKeys();
+                long key = random.nextInt(_zkBenchmark.getKeys());
                 data = new String(_zkBenchmark.getData() + key).getBytes();
                 _client.setData().forPath("/" + key, data);
                 break;
