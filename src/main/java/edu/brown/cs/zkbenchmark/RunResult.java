@@ -18,6 +18,14 @@ public class RunResult {
     }
     public OpTime[] latencies;
 
+    public long getAverageLatencyNanos() {
+        long avgLatency = 0;
+        for (int i = 0; i < latencies.length; i++) {
+            avgLatency += (latencies[i].endTime - latencies[i].startTime) / latencies.length;
+        }
+        return avgLatency;
+    }
+
     public long[] getLatenciesPerSecond() {
         int durationSecs = (int)(getDurationNanos() / (1000 * 1000 * 1000)) + 1;
         long[] avgLatencies = new long[durationSecs];

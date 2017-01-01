@@ -154,12 +154,15 @@ public class ZooKeeperBenchmark {
             }
         }
 
-        System.out.print("client,duration,ops\n");
+        System.out.print("client,duration,ops,latency\n");
         double totalThroughputEst = 0;
+        long averageLatency = 0;
         for (int i = 0; i < results.length; i++) {
             RunResult result = results[i];
             totalThroughputEst += (1.0*result.numOps) / (result.getDurationNanos()/1000000000.0);
-            System.out.print("client-" + i + "," + result.getDurationNanos() + "," + result.numOps + "\n");
+            long latency = result.getAverageLatencyNanos();
+            averageLatency +=  latency / results.length;
+            System.out.println("client-" + i + "," + result.getDurationNanos() + "," + result.numOps + "," + latency);
         }
 
         executor.shutdown();
@@ -168,8 +171,8 @@ public class ZooKeeperBenchmark {
                  totalThroughputEst);
 
         System.out.println("\n");
-        System.out.println("clients,keys,throughput\n");
-        System.out.println("" + getClients() + ","  + getKeys() + "," + totalThroughputEst);
+        System.out.println("clients,keys,throughput,latency");
+        System.out.println("" + getClients() + ","  + getKeys() + "," + totalThroughputEst + "," + averageLatency);
     }
 
     int getClients() {
