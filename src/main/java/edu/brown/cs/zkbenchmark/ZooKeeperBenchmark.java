@@ -78,7 +78,7 @@ public class ZooKeeperBenchmark {
 
         _data = "";
 
-        for (int i = 0; i < 8; i++) { // 8 bytes of important data
+        for (int i = 0; i < 50; i++) { // 8 bytes of important data
             _data += "!";
         }
 
