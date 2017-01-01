@@ -94,9 +94,9 @@ public class ZooKeeperBenchmark {
 
         doTest();
 
-        for (int i = 0; i < _clients.length; i++) {
-            _clients[i].doCleaning();
-        }
+        // for (int i = 0; i < _clients.length; i++) {
+        //     _clients[i].doCleaning();
+        // }
 
         LOG.info("All tests are complete");
     }
