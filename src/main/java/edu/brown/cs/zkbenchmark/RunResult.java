@@ -21,9 +21,9 @@ public class RunResult {
     public long getAverageLatencyNanos() {
         long avgLatency = 0;
         for (int i = 0; i < latencies.length; i++) {
-            avgLatency += (latencies[i].endTime - latencies[i].startTime) / latencies.length;
+            avgLatency += (latencies[i].endTime - latencies[i].startTime) / 1000; // micros
         }
-        return avgLatency;
+        return 1000 * (avgLatency / latencies.length);
     }
 
     public long[] getLatenciesPerSecond() {
