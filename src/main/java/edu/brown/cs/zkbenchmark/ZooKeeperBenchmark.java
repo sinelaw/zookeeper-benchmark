@@ -105,9 +105,10 @@ public class ZooKeeperBenchmark {
     /* This is where each individual test starts */
 
     public void doTest() {
+        System.out.println("Creating");
         _clients[0].doCreate();
 
-        System.out.print("Runnning " + _clients.length + " clients\n");
+        System.out.println("Runnning " + _clients.length + " clients");
         ExecutorService executor = Executors.newFixedThreadPool(_clients.length, new DaemonThreadFactory());
 
         _barrier = new CyclicBarrier(_clients.length+1);
@@ -118,7 +119,7 @@ public class ZooKeeperBenchmark {
             executor.execute(tmp);
         }
 
-        System.out.print("Clients started\n");
+        System.out.println("Clients started");
         // Wait for clients to connect to their assigned server, and
         // start timer which ensures we have outstanding requests.
         LOG.info("Waiting for clients to connect");
@@ -141,7 +142,7 @@ public class ZooKeeperBenchmark {
             LOG.warn("Benchmark main thread was interrupted while waiting on barrier", e);
         }
 
-        System.out.print("Done waiting for connections\n");
+        System.out.println("Done waiting for connections");
 
         // Wait for the test to finish
         RunResult[] results = new RunResult[_clients.length];
@@ -155,7 +156,7 @@ public class ZooKeeperBenchmark {
             }
         }
 
-        System.out.print("client,duration,ops,latency\n");
+        System.out.println("client,duration,ops,latency");
         double totalThroughputEst = 0;
         long averageLatency = 0;
 
