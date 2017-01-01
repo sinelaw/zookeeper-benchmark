@@ -159,6 +159,15 @@ public class ZooKeeperBenchmark {
         double totalThroughputEst = 0;
         long averageLatency = 0;
 
+        long endTime = System.nanoTime();
+        int durationSeconds = (int)((endTime - _startCpuTime) / 1000000000 + 1);
+        long[] opsPerSecond = new long[durationSeconds];
+        long[] latencyPerSecondMicros = new long[durationSeconds];
+        for (int i = 0; i < opsPerSecond.length; i++) {
+            opsPerSecond[i] = 0;
+            latencyPerSecondMicros[i] = 0;
+        }
+
         long[] allLatencies = new long[_totalOps];
         int opsPerClient = results[0].latencies.length;
         for (int i = 0; i < results.length; i++) {
@@ -171,7 +180,12 @@ public class ZooKeeperBenchmark {
                 if (result.latencies.length != opsPerClient) {
                     throw new RuntimeException("Expecting exactly this amount of results per client: " + opsPerClient);
                 }
-                allLatencies[i * opsPerClient + j] = result.latencies[j].endTime - result.latencies[j].startTime;
+                int second = (int)(result.latencies[j].endTime / 1000000000);
+                opsPerSecond[second] += 1;
+                long curLatency = result.latencies[j].endTime - result.latencies[j].startTime;
+                latencyPerSecondMicros[second] += curLatency / 1000; // micros
+
+                allLatencies[i * opsPerClient + j] = curLatency;
             }
         }
         Arrays.sort(allLatencies);
@@ -182,9 +196,22 @@ public class ZooKeeperBenchmark {
         LOG.info("Test finished: operations: " + _totalOps + " avg rate: " +
                  totalThroughputEst);
 
+        long averageThroughput = 0;
+        System.out.println("\n");
+        System.out.println("second,throughput,latency");
+        for (int i = 1; i < opsPerSecond.length - 2; i++) {
+            averageThroughput += opsPerSecond[i];
+            System.out.println("" + i + "," + opsPerSecond[i] + "," + latencyPerSecondMicros[i]/opsPerSecond[i]);
+        }
+        if (opsPerSecond.length > 3) {
+            averageThroughput /= (opsPerSecond.length - 3);
+        } else {
+            averageThroughput = 0;
+        }
+
         System.out.println("\n");
         System.out.println("clients,keys,throughput,latency,latency99");
-        System.out.println("" + getClients() + ","  + getKeys() + "," + totalThroughputEst + "," + averageLatency + "," + latency99);
+        System.out.println("" + getClients() + ","  + getKeys() + "," + averageThroughput + "," + averageLatency + "," + latency99);
     }
 
     int getClients() {
