@@ -34,15 +34,10 @@ public class ZooKeeperBenchmark {
     private BenchmarkClient[] _clients;
     private int _interval;
     private long _startCpuTime;
-    private HashMap<Integer, FutureTask<Integer>> _running;
+    private HashMap<Integer, FutureTask<RunResult>> _running;
     private String _data;
-    private BufferedWriter _rateFile;
     private CyclicBarrier _barrier;
     private int _keys;
-
-    enum TestType {
-        READ, SETSINGLE, SETMULTI, CREATE, DELETE, CLEANING, UNDEFINED
-    }
 
     private static final Logger LOG = Logger.getLogger(ZooKeeperBenchmark.class);
 
@@ -73,7 +68,7 @@ public class ZooKeeperBenchmark {
         _totalOps = conf.getInt("totalOperations");
         _lowerbound = conf.getInt("lowerbound");
 
-        _running = new HashMap<Integer,FutureTask<Integer>>();
+        _running = new HashMap<Integer,FutureTask<RunResult>>();
         _clients = new BenchmarkClient[conf.getInt("clients")];
         _barrier = new CyclicBarrier(_clients.length+1);
 
@@ -104,15 +99,7 @@ public class ZooKeeperBenchmark {
          * have already been finished. In this case, the output
          * of read test doesn't reflect the actual rate of
          * read requests. */
-        // doTest(TestType.READ, "warm-up");
-
-        // doTest(TestType.READ, "znode read"); // Do twice to allow for warm-up
-
-        // doTest(TestType.SETSINGLE, "repeated single-znode write");
-
-        doTest(TestType.CREATE, "znode create", true);
-
-        doTest(TestType.SETMULTI, "different znode write", false);
+        doTest("different znode write", false);
 
         /* In the test, node creation and deletion tests are
          * done by creating a lot of nodes at first and then
@@ -127,43 +114,21 @@ public class ZooKeeperBenchmark {
 
         LOG.info("Tests completed, now cleaning-up");
 
-        ExecutorService executor = Executors.newFixedThreadPool(_clients.length, new DaemonThreadFactory());
-
         for (int i = 0; i < _clients.length; i++) {
-            _clients[i].setTest(TestType.CLEANING);
-            FutureTask<Integer> tmp = new FutureTask<Integer>(_clients[i], 0);
-            _running.put(new Integer(i), tmp);
-            executor.execute(tmp);
+            _clients[i].doCleaning();
         }
-
-        for (Integer i: _running.keySet()) {
-            try {
-                _running.get(i).get();
-            } catch (Exception e) {
-                executor.shutdown();
-                LOG.warn("Error in thread", e);
-                throw new RuntimeException("Interrupted");
-            }
-        }
-
-        executor.shutdown();
 
         LOG.info("All tests are complete");
     }
 
     /* This is where each individual test starts */
 
-    public void doTest(TestType test, String description, Boolean singleClient) {
+    public void doTest(String description, Boolean singleClient) {
         System.out.print("Running " + description + " benchmark... ");
 
-        try {
-            _rateFile = new BufferedWriter(new FileWriter(new File(test+".dat")));
-        } catch (IOException e) {
-            LOG.error("Unable to create output file", e);
-        }
-
-
         // Start the testing clients!
+
+        _clients[0].doCreate();
 
         System.out.print("Runnning " + _clients.length + " clients\n");
         ExecutorService executor = Executors.newFixedThreadPool(_clients.length, new DaemonThreadFactory());
@@ -171,8 +136,7 @@ public class ZooKeeperBenchmark {
         _barrier = new CyclicBarrier(singleClient ? 2 : _clients.length+1);
 
         for (int i = 0; i < _clients.length; i++) {
-            _clients[i].setTest(test);
-            FutureTask<Integer> tmp = new FutureTask<Integer>(_clients[i], 0);
+            FutureTask<RunResult> tmp = new FutureTask<RunResult>(_clients[i]);
             _running.put(new Integer(i), tmp);
             executor.execute(tmp);
             if (singleClient) break;
@@ -219,16 +183,7 @@ public class ZooKeeperBenchmark {
 
         executor.shutdown();
 
-        // Test is finished
-        try {
-            if (_rateFile != null) {
-                _rateFile.close();
-            }
-        } catch (IOException e) {
-            LOG.warn("Error while closing output file", e);
-        }
-
-        LOG.info(test + " finished, time elapsed (sec): " + time +
+        LOG.info("Test finished, time elapsed (sec): " + time +
                  " operations: " + _totalOps + " avg rate: " +
                  _totalOps/time);
 

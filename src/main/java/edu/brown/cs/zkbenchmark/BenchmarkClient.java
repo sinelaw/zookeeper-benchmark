@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.BrokenBarrierException;
+import java.util.concurrent.Callable;
 import java.util.Random;
 
 import org.apache.zookeeper.data.Stat;
@@ -23,13 +24,10 @@ import com.netflix.curator.framework.CuratorFrameworkFactory;
 import com.netflix.curator.framework.api.CuratorEvent;
 import com.netflix.curator.retry.RetryNTimes;
 
-import edu.brown.cs.zkbenchmark.ZooKeeperBenchmark.TestType;
-
-public class BenchmarkClient implements Runnable {
+public class BenchmarkClient implements Callable<RunResult> {
     protected ZooKeeperBenchmark _zkBenchmark;
     protected String _host; // the host this client is connecting to
     protected CuratorFramework _client; // the actual client
-    protected TestType _type; // current test
     protected int _attempts;
     protected String _path;
     protected int _id;
@@ -53,7 +51,6 @@ public class BenchmarkClient implements Runnable {
             .connectString(_host).namespace(namespace)
             .retryPolicy(new RetryNTimes(Integer.MAX_VALUE,1000))
             .connectionTimeoutMs(5000).build();
-        _type = TestType.UNDEFINED;
         _attempts = attempts;
         _id = id;
         _path = "/client"+id;
@@ -63,14 +60,9 @@ public class BenchmarkClient implements Runnable {
     }
 
     @Override
-    public void run() {
+    public RunResult call() {
         if (!_client.isStarted())
             _client.start();
-
-        if (_type == TestType.CLEANING) {
-            doCleaning();
-            return;
-        }
 
         zkAdminCommand("srst"); // Reset ZK server's statistics
 
@@ -84,11 +76,6 @@ public class BenchmarkClient implements Runnable {
         } catch (BrokenBarrierException e) {
             LOG.warn("Some other client was interrupted. Client #" + _id + " is out of sync", e);
             throw new RuntimeException(e);
-        }
-
-        if (_type == TestType.CREATE) {
-            doCreate();
-            return;
         }
 
         _count = 0;
@@ -110,7 +97,7 @@ public class BenchmarkClient implements Runnable {
         // periodically in case we want to record periodic statistics
         // Submit the requests!
 
-        submit(_attempts, _type);
+        return submit(_attempts);
 
 
         // try {
@@ -140,7 +127,7 @@ public class BenchmarkClient implements Runnable {
 
     }
 
-    void doCleaning() {
+    public void doCleaning() {
         try {
             deleteChildren();
         } catch (Exception e) {
@@ -219,13 +206,9 @@ public class BenchmarkClient implements Runnable {
         return _zkBenchmark;
     }
 
-    void setTest(TestType type) {
-        _type = type;
-    }
-
-    protected void submit(int n, TestType type) {
+    protected RunResult submit(int n) {
         try {
-            submitWrapped(n, type);
+            return submitWrapped(n);
         } catch (Exception e) {
             // What can you do? for some reason
             // com.netflix.curator.framework.api.Pathable.forPath() throws Exception
@@ -233,15 +216,6 @@ public class BenchmarkClient implements Runnable {
             throw new RuntimeException(e);
         }
     }
-
-    class OpTime {
-        public long startTime;
-        public long endTime;
-        public OpTime(long s, long e) {
-            startTime = s;
-            endTime = e;
-        }
-    };
 
     protected void doCreate() {
         try {
@@ -259,67 +233,31 @@ public class BenchmarkClient implements Runnable {
         }
     }
 
-    protected void submitWrapped(int n, TestType type) throws Exception {
+    protected RunResult submitWrapped(int n) throws Exception {
         byte data[];
 
+        RunResult result = new RunResult();
+
         LOG.debug("Starting job");
-        long testStart = System.nanoTime();
         Random random = new Random();
-        OpTime[] latencies = new OpTime[1000 * 1000];
         int ops_per_client = _zkBenchmark.getTotalOps() / _zkBenchmark.getClients();
         int ops = ops_per_client;
+        result.latencies = new RunResult.OpTime[ops];
+        result.startNanos = System.nanoTime();
         for (int i = 0; i < ops; i++) {
             long submitTime = System.nanoTime();
 
-            switch (type) {
-            case READ:
-                _client.getData().forPath(_path);
-                break;
-
-            case SETSINGLE:
-                data = new String(_zkBenchmark.getData() + i).getBytes();
-                _client.setData().forPath("/singleKey", data);
-                break;
-
-            case SETMULTI:
-                long key = random.nextInt(_zkBenchmark.getKeys());
-                data = new String(_zkBenchmark.getData() + key).getBytes();
-                _client.setData().forPath("/" + key, data);
-                break;
-
-            case CREATE:
-            case DELETE:
-            default:
-                throw new RuntimeException("Not expecting: " + type);
-            }
+            long key = random.nextInt(_zkBenchmark.getKeys());
+            data = new String(_zkBenchmark.getData() + key).getBytes();
+            _client.setData().forPath("/" + key, data);
 
             long endTime = System.nanoTime();
-            latencies[i] = new OpTime(submitTime, endTime);
+            result.latencies[i] = new RunResult.OpTime(submitTime, endTime);
             _count++;
 
         }
-        // long duration = System.nanoTime() - testStart;
-        // int durationSecs = (int)(duration / (1000 * 1000 * 1000)) + 1;
-        // long[] avgLatencies = new long[durationSecs];
-        // long[] binSizes = new long[durationSecs];
-        // for (int i = 0; i < durationSecs; i++) {
-        //     avgLatencies[i] = 0;
-        //     binSizes[i] = 0;
-        // }
-        // for (int i = 0; i < _count; i++) {
-        //     int sec = (int)((latencies[i].startTime - testStart) / (1000 * 1000 * 1000));
-        //     avgLatencies[sec] += (latencies[i].endTime - latencies[i].startTime) / 1000; // micros
-        //     binSizes[sec]++;
-        // }
-        // for (int i = 0; i < avgLatencies.length; i++) {
-        //     long res = binSizes[i] == 0 ? 0 : avgLatencies[i]/binSizes[i];
-        //     try {
-        //         _latenciesFile.write(Integer.toString(i) + " " + res + "\n");
-        //     } catch (IOException e) {
-        //         LOG.error("Exceptions while writing to file", e);
-        //     }
-
-        // }
-
+        result.endNanos = System.nanoTime();
+        result.numOps = ops;
+        return result;
     }
 }
