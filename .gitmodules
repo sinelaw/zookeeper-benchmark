@@ -1,0 +1,3 @@
+[submodule "submodules/zkconf"]
+	path = submodules/zkconf
+	url = git@github.com:phunt/zkconf.git
