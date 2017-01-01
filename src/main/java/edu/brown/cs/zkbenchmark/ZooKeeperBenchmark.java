@@ -202,7 +202,8 @@ public class ZooKeeperBenchmark {
         System.out.println("second,throughput,latency_micro");
         for (int i = 1; i < opsPerSecond.length - 2; i++) {
             averageThroughput += opsPerSecond[i];
-            System.out.println("" + i + "," + opsPerSecond[i] + "," + latencyPerSecondMicros[i]/opsPerSecond[i]);
+            long latency = opsPerSecond[i] == 0 ? 0 : latencyPerSecondMicros[i]/opsPerSecond[i];
+            System.out.println("" + i + "," + opsPerSecond[i] + "," + latency);
         }
         if (opsPerSecond.length > 3) {
             averageThroughput /= (opsPerSecond.length - 3);
