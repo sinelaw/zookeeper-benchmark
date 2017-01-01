@@ -28,9 +28,6 @@ public class AsyncBenchmarkClient extends BenchmarkClient {
 
     @Override
     protected void submit(int n, TestType type) {
-        ListenerContainer<CuratorListener> listeners = (ListenerContainer<CuratorListener>)_client.getCuratorListenable();
-        BenchmarkListener listener = new BenchmarkListener(this);
-        listeners.addListener(listener);
         _currentType = type;
         _asyncRunning = true;
 
@@ -45,8 +42,6 @@ public class AsyncBenchmarkClient extends BenchmarkClient {
                 }
             }
         }
-
-        listeners.removeListener(listener);
     }
 
     private void submitRequests(int n, TestType type) {
@@ -113,10 +108,5 @@ public class AsyncBenchmarkClient extends BenchmarkClient {
             _asyncRunning = false;
             _monitor.notify();
         }
-    }
-
-    @Override
-    protected void resubmit(int n) {
-        submitRequests(n, _currentType);
     }
 }

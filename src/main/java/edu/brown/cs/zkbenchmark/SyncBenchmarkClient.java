@@ -11,7 +11,6 @@ import edu.brown.cs.zkbenchmark.ZooKeeperBenchmark.TestType;
 
 public class SyncBenchmarkClient extends BenchmarkClient {
 
-    AtomicInteger _totalOps;
     private boolean _syncfin;
 
     private static final Logger LOG = Logger.getLogger(SyncBenchmarkClient.class);
@@ -45,14 +44,14 @@ public class SyncBenchmarkClient extends BenchmarkClient {
 
     protected void submitWrapped(int n, TestType type) throws Exception {
         _syncfin = false;
-        _totalOps = _zkBenchmark.getCurrentTotalOps();
         byte data[];
 
         LOG.debug("Starting job");
         long testStart = System.nanoTime();
         Random random = new Random();
         OpTime[] latencies = new OpTime[1000 * 1000];
-        for (int i = 0; i < _totalOps.get(); i++) {
+        int ops = _zkBenchmark.getTotalOps();
+        for (int i = 0; i < ops; i++) {
             long submitTime = System.nanoTime();
 
             switch (type) {
@@ -101,7 +100,6 @@ public class SyncBenchmarkClient extends BenchmarkClient {
             long endTime = System.nanoTime();
             latencies[i] = new OpTime(submitTime, endTime);
             _count++;
-            _zkBenchmark.incrementFinished();
 
             if (_syncfin)
                 break;
@@ -134,14 +132,5 @@ public class SyncBenchmarkClient extends BenchmarkClient {
     @Override
     protected void finish() {
         _syncfin = true;
-    }
-
-    /**
-     * in fact, n here can be arbitrary number as synchronous operations can be stopped
-     * after finishing any operation.
-     */
-    @Override
-    protected void resubmit(int n) {
-        _totalOps.getAndAdd(n);
     }
 }

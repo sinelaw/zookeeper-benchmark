@@ -30,7 +30,6 @@ import org.apache.log4j.Logger;
 
 public class ZooKeeperBenchmark {
     private int _totalOps; // total operations requested by user
-    private AtomicInteger _currentTotalOps; // possibly increased # of ops so test last for requested time
     private int _lowerbound;
     private BenchmarkClient[] _clients;
     private int _interval;
@@ -173,7 +172,6 @@ public class ZooKeeperBenchmark {
         _currentTest = test;
         _finishedTotal = new AtomicInteger(0);
         _lastfinished = 0;
-        _currentTotalOps = new AtomicInteger(_totalOps);
 
         System.out.print("Running " + description + " benchmark for " + _totalTimeSeconds + " seconds... ");
 
@@ -217,9 +215,6 @@ public class ZooKeeperBenchmark {
 
         System.out.print("Done waiting for connections\n");
 
-        Timer timer = new Timer();
-        timer.scheduleAtFixedRate(new ResubmitTimer() , _interval, _interval);
-
         // Wait for the test to finish
         for (Integer i: _running.keySet()) {
             try {
@@ -236,7 +231,6 @@ public class ZooKeeperBenchmark {
         // Test is finished
 
         _currentTest = TestType.UNDEFINED;
-        timer.cancel();
 
         try {
             if (_rateFile != null) {
@@ -266,14 +260,8 @@ public class ZooKeeperBenchmark {
         return (ret * _interval)/1000.0;
     }
 
-    // TODO(adf): currently unused. should we keep it?
     int getTotalOps() {
-        /* return the total number of reqs done by all threads */
-        int ret = 0;
-        for (int i = 0; i < _clients.length; i++) {
-            ret += _clients[i].getOpsCount();
-        }
-        return ret;
+        return _totalOps;
     }
 
     long getKeys() {
@@ -282,10 +270,6 @@ public class ZooKeeperBenchmark {
 
     TestType getCurrentTest() {
         return _currentTest;
-    }
-
-    void incrementFinished() {
-        _finishedTotal.incrementAndGet();
     }
 
     CyclicBarrier getBarrier() {
@@ -298,10 +282,6 @@ public class ZooKeeperBenchmark {
 
     int getDeadline() {
         return _deadline;
-    }
-
-    AtomicInteger getCurrentTotalOps() {
-        return _currentTotalOps;
     }
 
     int getInterval() {
@@ -412,49 +392,4 @@ public class ZooKeeperBenchmark {
         System.exit(0);
     }
 
-    class ResubmitTimer extends TimerTask {
-        @Override
-        public void run() {
-            if (_currentTest == TestType.UNDEFINED) {
-                return;
-            }
-
-            int finished = _finishedTotal.get();
-            if (finished == 0) {
-                return;
-            }
-
-            _currentCpuTime = System.nanoTime();
-
-            if (_rateFile != null) {
-                try {
-                    if (finished - _lastfinished > 0) {
-                        // Record the time elapsed and current rate
-                        String msg = ((double)(_currentCpuTime - _startCpuTime)/1000000000.0) + " " +
-                            ((double)(finished - _lastfinished) /
-                             ((double)(_currentCpuTime - _lastCpuTime) / 1000000000.0));
-                        _rateFile.write(msg+"\n");
-                    }
-                } catch (IOException e) {
-                    LOG.error("Error when writing to output file", e);
-                }
-            }
-
-            _lastCpuTime = _currentCpuTime;
-            _lastfinished = finished;
-
-            int numRemaining = _currentTotalOps.get() - finished;
-
-            if (numRemaining <= _lowerbound) {
-                int incr = _totalOps - numRemaining;
-
-                _currentTotalOps.getAndAdd(incr);
-                int avg = incr / _clients.length;
-
-                for (int i = 0; i < _clients.length; i++) {
-                    _clients[i].resubmit(avg);
-                }
-            }
-        }
-    }
 }
