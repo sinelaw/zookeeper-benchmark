@@ -72,7 +72,7 @@ public class ZooKeeperBenchmark {
 		boolean sync = conf.getBoolean("sync");
 		
 		_running = new HashMap<Integer,Thread>();		
-		_clients = new BenchmarkClient[serverList.size()];
+		_clients = new BenchmarkClient[conf.getInt("clients")];
 		_barrier = new CyclicBarrier(_clients.length+1);
 		_deadline = totaltime / _interval;
 		
@@ -81,17 +81,18 @@ public class ZooKeeperBenchmark {
 
 		_data = "";
 
-		for (int i = 0; i < 20; i++) { // 100 bytes of important data
-			_data += "!!!!!";
+		for (int i = 0; i < 8; i++) { // 8 bytes of important data
+			_data += "!";
 		}
 
 		int avgOps = _totalOps / serverList.size();
 
-		for (int i = 0; i < serverList.size(); i++) {
+		for (int i = 0; i < _clients.length; i++) {
+                    int server_idx = i % serverList.size();
 			if (sync) {
-				_clients[i] = new SyncBenchmarkClient(this, serverList.get(i), "/zkTest", avgOps, i);
+				_clients[i] = new SyncBenchmarkClient(this, serverList.get(server_idx), "/zkTest", avgOps, i);
 			} else {
-				_clients[i] = new AsyncBenchmarkClient(this, serverList.get(i), "/zkTest", avgOps, i);
+				_clients[i] = new AsyncBenchmarkClient(this, serverList.get(server_idx), "/zkTest", avgOps, i);
 			}
 		}
 		
@@ -310,6 +311,8 @@ public class ZooKeeperBenchmark {
 			withRequiredArg().ofType(Integer.class);
 		parser.accepts("sync", "sync or async test").
 			withRequiredArg().ofType(Boolean.class);
+		parser.accepts("clients", "number of clients").
+                        withRequiredArg().ofType(Integer.class).required();
 
 		// Parse and gather the arguments
 		try {
@@ -329,6 +332,7 @@ public class ZooKeeperBenchmark {
 		Integer lowerbound = (Integer) options.valueOf("lbound");
 		Integer time = (Integer) options.valueOf("time");
 		Boolean sync = (Boolean) options.valueOf("sync");
+                Integer clients = (Integer) options.valueOf("clients");
 		
 		// Load and parse the configuration file
 		String configFile = (String) options.valueOf("conf");
@@ -352,6 +356,8 @@ public class ZooKeeperBenchmark {
 			conf.setProperty("totalTime", time);
 		if (sync != null)
 			conf.setProperty("sync", sync);
+
+                conf.setProperty("clients", clients);
 
 		return conf;
 	}
