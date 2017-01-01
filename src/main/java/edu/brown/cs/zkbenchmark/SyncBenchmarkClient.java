@@ -50,7 +50,7 @@ public class SyncBenchmarkClient extends BenchmarkClient {
         long testStart = System.nanoTime();
         Random random = new Random();
         OpTime[] latencies = new OpTime[1000 * 1000];
-        int ops = _zkBenchmark.getTotalOps();
+        int ops = _zkBenchmark.getTotalOps() / _zkBenchmark.getClients();
         for (int i = 0; i < ops; i++) {
             long submitTime = System.nanoTime();
 
