@@ -57,13 +57,14 @@ public class BenchmarkClient implements Callable<RunResult> {
         _timer = new Timer();
         _highestN = 0;
         _highestDeleted = 0;
+
+        if (!_client.isStarted()) {
+            _client.start();
+        }
     }
 
     @Override
     public RunResult call() {
-        if (!_client.isStarted())
-            _client.start();
-
         zkAdminCommand("srst"); // Reset ZK server's statistics
 
         // Wait for all clients to be ready

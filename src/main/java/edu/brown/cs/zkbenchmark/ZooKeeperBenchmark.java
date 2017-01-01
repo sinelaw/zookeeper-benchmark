@@ -168,16 +168,24 @@ public class ZooKeeperBenchmark {
         System.out.print("Done waiting for connections\n");
 
         // Wait for the test to finish
+        RunResult[] results = new RunResult[_clients.length];
         for (Integer i: _running.keySet()) {
             try {
-                _running.get(i).get();
+                results[i] = _running.get(i).get();
             } catch (Exception e) {
                 executor.shutdown();
                 LOG.warn("Error in thread", e);
                 throw new RuntimeException("Interrupted");
             }
         }
+
         long endTime = System.nanoTime();
+
+        System.out.print("client,duration,ops\n");
+        for (int i = 0; i < results.length; i++) {
+            RunResult result = results[i];
+            System.out.print("client-" + i + "," + result.getDurationNanos() + "," + result.numOps + "\n");
+        }
 
         double time = (endTime - _startCpuTime) / 1000000000.0;
 
@@ -187,6 +195,7 @@ public class ZooKeeperBenchmark {
                  " operations: " + _totalOps + " avg rate: " +
                  _totalOps/time);
 
+        System.out.println("\n");
         System.out.println("clients,keys,throughput\n");
         System.out.println("" + getClients() + ","  + getKeys() + "," + _totalOps/time);
     }
