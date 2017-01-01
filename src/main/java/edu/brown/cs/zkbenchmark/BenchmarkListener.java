@@ -8,25 +8,25 @@ import com.netflix.curator.framework.api.CuratorListener;
 import edu.brown.cs.zkbenchmark.ZooKeeperBenchmark.TestType;
 
 class BenchmarkListener implements CuratorListener {
-	private BenchmarkClient _client; // client listener listens for
+    private BenchmarkClient _client; // client listener listens for
 
-	BenchmarkListener(BenchmarkClient client) {
-		_client = client;
-	}
+    BenchmarkListener(BenchmarkClient client) {
+        _client = client;
+    }
 
-	@Override
-	public void eventReceived(CuratorFramework client, CuratorEvent event) {
-		CuratorEventType type = event.getType();
+    @Override
+    public void eventReceived(CuratorFramework client, CuratorEvent event) {
+        CuratorEventType type = event.getType();
 
-		// Ensure that the event is reply to current test
-		if ((type == CuratorEventType.GET_DATA && _client.getBenchmark().getCurrentTest() == TestType.READ) ||
-			(type == CuratorEventType.SET_DATA && _client.getBenchmark().getCurrentTest() == TestType.SETMULTI) ||
-			(type == CuratorEventType.SET_DATA && _client.getBenchmark().getCurrentTest() == TestType.SETSINGLE) ||
-			(type == CuratorEventType.DELETE && _client.getBenchmark().getCurrentTest() == TestType.DELETE) ||
-			(type == CuratorEventType.CREATE && _client.getBenchmark().getCurrentTest() == TestType.CREATE)) {
-				_client.getBenchmark().incrementFinished();
-				_client.recordEvent(event);
-				_client.resubmit(1);
-		}
-	}			
+        // Ensure that the event is reply to current test
+        if ((type == CuratorEventType.GET_DATA && _client.getBenchmark().getCurrentTest() == TestType.READ) ||
+            (type == CuratorEventType.SET_DATA && _client.getBenchmark().getCurrentTest() == TestType.SETMULTI) ||
+            (type == CuratorEventType.SET_DATA && _client.getBenchmark().getCurrentTest() == TestType.SETSINGLE) ||
+            (type == CuratorEventType.DELETE && _client.getBenchmark().getCurrentTest() == TestType.DELETE) ||
+            (type == CuratorEventType.CREATE && _client.getBenchmark().getCurrentTest() == TestType.CREATE)) {
+            _client.getBenchmark().incrementFinished();
+            _client.recordEvent(event);
+            _client.resubmit(1);
+        }
+    }
 }
