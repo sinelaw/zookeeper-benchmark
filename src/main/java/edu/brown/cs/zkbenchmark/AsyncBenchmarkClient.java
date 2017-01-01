@@ -97,7 +97,6 @@ public class AsyncBenchmarkClient extends BenchmarkClient {
 
                 if (_highestDeleted >= _highestN) {
                     zkAdminCommand("stat");
-                    _zkBenchmark.notifyFinished(_id);
                     _timer.cancel();
                     _count++;
                     return;

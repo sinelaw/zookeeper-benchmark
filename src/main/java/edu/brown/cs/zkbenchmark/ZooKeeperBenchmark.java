@@ -46,7 +46,6 @@ public class ZooKeeperBenchmark {
     private String _data;
     private BufferedWriter _rateFile;
     private CyclicBarrier _barrier;
-    private Boolean _finished;
     private long _keys;
 
     enum TestType {
@@ -127,9 +126,9 @@ public class ZooKeeperBenchmark {
 
         // doTest(TestType.SETSINGLE, "repeated single-znode write");
 
-        doTest(TestType.CREATE, "znode create");
+        doTest(TestType.CREATE, "znode create", true);
 
-        doTest(TestType.SETMULTI, "different znode write");
+        doTest(TestType.SETMULTI, "different znode write", false);
 
         /* In the test, node creation and deletion tests are
          * done by creating a lot of nodes at first and then
@@ -153,7 +152,7 @@ public class ZooKeeperBenchmark {
             executor.execute(tmp);
         }
 
-        for (int i = 0; i < _clients.length; i++) {
+        for (Integer i: _running.keySet()) {
             try {
                 _running.get(i).get();
             } catch (Exception e) {
@@ -164,22 +163,17 @@ public class ZooKeeperBenchmark {
         }
 
         executor.shutdown();
-        if (!_finished) {
-            throw new RuntimeException("Should have finished");
-        }
-
 
         LOG.info("All tests are complete");
     }
 
     /* This is where each individual test starts */
 
-    public void doTest(TestType test, String description) {
+    public void doTest(TestType test, String description, Boolean singleClient) {
         _currentTest = test;
         _finishedTotal = new AtomicInteger(0);
         _lastfinished = 0;
         _currentTotalOps = new AtomicInteger(_totalOps);
-        _finished = false;
 
         System.out.print("Running " + description + " benchmark for " + _totalTimeSeconds + " seconds... ");
 
@@ -195,17 +189,20 @@ public class ZooKeeperBenchmark {
 
         // Start the testing clients!
 
-        System.out.print("Runnning " + _clients.length + " clients");
+        System.out.print("Runnning " + _clients.length + " clients\n");
         ExecutorService executor = Executors.newFixedThreadPool(_clients.length, new DaemonThreadFactory());
+
+        _barrier = new CyclicBarrier(singleClient ? 2 : _clients.length+1);
 
         for (int i = 0; i < _clients.length; i++) {
             _clients[i].setTest(test);
             FutureTask<Integer> tmp = new FutureTask<Integer>(_clients[i], 0);
             _running.put(new Integer(i), tmp);
             executor.execute(tmp);
+            if (singleClient) break;
         }
 
-        System.out.print("Clients started");
+        System.out.print("Clients started\n");
         // Wait for clients to connect to their assigned server, and
         // start timer which ensures we have outstanding requests.
         LOG.info("Waiting for clients to connect");
@@ -218,14 +215,13 @@ public class ZooKeeperBenchmark {
             LOG.warn("Benchmark main thread was interrupted while waiting on barrier", e);
         }
 
-        System.out.print("Done waiting for connections");
+        System.out.print("Done waiting for connections\n");
 
         Timer timer = new Timer();
         timer.scheduleAtFixedRate(new ResubmitTimer() , _interval, _interval);
 
         // Wait for the test to finish
-
-        for (int i = 0; i < _clients.length; i++) {
+        for (Integer i: _running.keySet()) {
             try {
                 _running.get(i).get();
             } catch (Exception e) {
@@ -236,9 +232,6 @@ public class ZooKeeperBenchmark {
         }
 
         executor.shutdown();
-        if (!_finished) {
-            throw new RuntimeException("Should have finished");
-        }
 
         // Test is finished
 
@@ -317,16 +310,6 @@ public class ZooKeeperBenchmark {
 
     long getStartTime() {
         return _startCpuTime;
-    }
-
-    void notifyFinished(int id) {
-        synchronized (_running) {
-            _running.remove(new Integer(id));
-            if (_running.size() == 0) {
-                _finished = true;
-                _running.notify();
-            }
-        }
     }
 
     private static PropertiesConfiguration initConfiguration(String[] args) {
@@ -421,7 +404,8 @@ public class ZooKeeperBenchmark {
             ZooKeeperBenchmark benchmark = new ZooKeeperBenchmark(conf);
             benchmark.runBenchmark();
         } catch (Exception e) {
-            LOG.error("Failed to start ZooKeeper benchmark", e);
+            LOG.error("Error: ", e);
+            System.out.println("Error: " + e + "\n");
             System.exit(1);
         }
 

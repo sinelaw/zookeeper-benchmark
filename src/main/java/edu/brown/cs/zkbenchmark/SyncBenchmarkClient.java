@@ -68,21 +68,31 @@ public class SyncBenchmarkClient extends BenchmarkClient {
             case SETMULTI:
                 long key = random.nextInt() % _zkBenchmark.getKeys();
                 data = new String(_zkBenchmark.getData() + key).getBytes();
-                _client.setData().forPath(_path + "/" + key, data);
+                _client.setData().forPath("/" + key, data);
                 break;
 
             case CREATE:
-                data = new String(_zkBenchmark.getData() + (i % _zkBenchmark.getKeys())).getBytes();
-                _client.create().forPath(_path + "/" + (_count % _zkBenchmark.getKeys()), data);
-                _highestN++;
+                if (i < _zkBenchmark.getKeys()) {
+                    try {
+                        _client.delete().forPath("/" + i);
+                    } catch (NoNodeException e) {
+                        if (LOG.isDebugEnabled()) {
+                            LOG.debug("No such node (" + "/" + i +
+                                      ") when deleting nodes", e);
+                        }
+                    }
+                    data = new String(_zkBenchmark.getData() + i).getBytes();
+                    _client.create().forPath("/" + i, data);
+                    _highestN++;
+                }
                 break;
 
             case DELETE:
                 try {
-                    _client.delete().forPath(_path + "/" + _count);
+                    _client.delete().forPath("/" + i);
                 } catch (NoNodeException e) {
                     if (LOG.isDebugEnabled()) {
-                        LOG.debug("No such node (" + _path + "/" + _count +
+                        LOG.debug("No such node (" + "/" + i +
                                   ") when deleting nodes", e);
                     }
                 }

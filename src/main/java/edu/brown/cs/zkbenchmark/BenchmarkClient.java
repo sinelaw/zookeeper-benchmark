@@ -133,8 +133,6 @@ public abstract class BenchmarkClient implements Runnable {
         LOG.info("Client #" + _id + " -- Current test complete. " +
                  "Completed " + _count + " operations.");
 
-        _zkBenchmark.notifyFinished(_id);
-
     }
 
     class FinishTimer extends TimerTask {
@@ -158,7 +156,6 @@ public abstract class BenchmarkClient implements Runnable {
             LOG.error("Exception while deleting old znodes", e);
         }
 
-        _zkBenchmark.notifyFinished(_id);
     }
 
     /* Delete all the child znodes created by this client */
