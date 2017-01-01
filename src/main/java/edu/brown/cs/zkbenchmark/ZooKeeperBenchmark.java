@@ -4,6 +4,7 @@ import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
@@ -157,13 +158,24 @@ public class ZooKeeperBenchmark {
         System.out.print("client,duration,ops,latency\n");
         double totalThroughputEst = 0;
         long averageLatency = 0;
+
+        long[] allLatencies = new long[_totalOps];
+        int opsPerClient = results[0].latencies.length;
         for (int i = 0; i < results.length; i++) {
             RunResult result = results[i];
             totalThroughputEst += (1.0*result.numOps) / (result.getDurationNanos()/1000000000.0);
             long latency = result.getAverageLatencyNanos();
             averageLatency +=  latency / results.length;
             System.out.println("client-" + i + "," + result.getDurationNanos() + "," + result.numOps + "," + latency);
+            for (int j = 0; j < result.latencies.length; j++) {
+                if (result.latencies.length != opsPerClient) {
+                    throw new RuntimeException("Expecting exactly this amount of results per client: " + opsPerClient);
+                }
+                allLatencies[i * opsPerClient + j] = result.latencies[j].endTime - result.latencies[j].startTime;
+            }
         }
+        Arrays.sort(allLatencies);
+        long latency99 = allLatencies[(allLatencies.length * 99) / 100];
 
         executor.shutdown();
 
@@ -171,8 +183,8 @@ public class ZooKeeperBenchmark {
                  totalThroughputEst);
 
         System.out.println("\n");
-        System.out.println("clients,keys,throughput,latency");
-        System.out.println("" + getClients() + ","  + getKeys() + "," + totalThroughputEst + "," + averageLatency);
+        System.out.println("clients,keys,throughput,latency,latency99");
+        System.out.println("" + getClients() + ","  + getKeys() + "," + totalThroughputEst + "," + averageLatency + "," + latency99);
     }
 
     int getClients() {
