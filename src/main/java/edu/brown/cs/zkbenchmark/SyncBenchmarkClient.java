@@ -1,5 +1,6 @@
 package edu.brown.cs.zkbenchmark;
 
+import java.util.Random;
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -29,6 +30,7 @@ public class SyncBenchmarkClient extends BenchmarkClient {
             // What can you do? for some reason
             // com.netflix.curator.framework.api.Pathable.forPath() throws Exception
             LOG.error("Error while submitting requests", e);
+            throw new RuntimeException(e);
         }
     }
 
@@ -46,7 +48,9 @@ public class SyncBenchmarkClient extends BenchmarkClient {
         _totalOps = _zkBenchmark.getCurrentTotalOps();
         byte data[];
 
+        LOG.debug("Starting job");
         long testStart = System.nanoTime();
+        Random random = new Random();
         OpTime[] latencies = new OpTime[1000 * 1000];
         for (int i = 0; i < _totalOps.get(); i++) {
             long submitTime = System.nanoTime();
@@ -58,23 +62,18 @@ public class SyncBenchmarkClient extends BenchmarkClient {
 
             case SETSINGLE:
                 data = new String(_zkBenchmark.getData() + i).getBytes();
-                _client.setData().forPath(_path, data);
+                _client.setData().forPath("/singleKey", data);
                 break;
 
             case SETMULTI:
-                try {
-                    data = new String(_zkBenchmark.getData() + i).getBytes();
-                    _client.setData().forPath(_path + "/" + (_count % _highestN), data);
-                } catch (NoNodeException e) {
-                    LOG.warn("No such node when setting data to mutiple nodes. " +
-                             "_path = " + _path + ", _count = " + _count +
-                             ", _highestN = " + _highestN, e);
-                }
+                long key = random.nextInt() % _zkBenchmark.getKeys();
+                data = new String(_zkBenchmark.getData() + key).getBytes();
+                _client.setData().forPath(_path + "/" + key, data);
                 break;
 
             case CREATE:
-                data = new String(_zkBenchmark.getData() + i).getBytes();
-                _client.create().forPath(_path + "/" + _count, data);
+                data = new String(_zkBenchmark.getData() + (i % _zkBenchmark.getKeys())).getBytes();
+                _client.create().forPath(_path + "/" + (_count % _zkBenchmark.getKeys()), data);
                 _highestN++;
                 break;
 

@@ -11,7 +11,11 @@ import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.BrokenBarrierException;
 import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.FutureTask;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
 
 import joptsimple.OptionException;
 import joptsimple.OptionParser;
@@ -30,7 +34,7 @@ public class ZooKeeperBenchmark {
     private int _lowerbound;
     private BenchmarkClient[] _clients;
     private int _interval;
-    private HashMap<Integer, Thread> _running;
+    private HashMap<Integer, FutureTask<Integer>> _running;
     private AtomicInteger _finishedTotal;
     private int _lastfinished;
     private int _deadline; // in units of "_interval"
@@ -43,12 +47,21 @@ public class ZooKeeperBenchmark {
     private BufferedWriter _rateFile;
     private CyclicBarrier _barrier;
     private Boolean _finished;
+    private long _keys;
 
     enum TestType {
         READ, SETSINGLE, SETMULTI, CREATE, DELETE, CLEANING, UNDEFINED
     }
 
     private static final Logger LOG = Logger.getLogger(ZooKeeperBenchmark.class);
+
+    class DaemonThreadFactory implements ThreadFactory {
+        public Thread newThread(Runnable r) {
+            Thread t = new Thread(r);
+            t.setDaemon(true);
+            return t;
+        }
+    }
 
     public ZooKeeperBenchmark(Configuration conf) throws IOException {
         LinkedList<String> serverList = new LinkedList<String>();
@@ -64,6 +77,7 @@ public class ZooKeeperBenchmark {
             throw new IllegalArgumentException("ZooKeeper server addresses required");
         }
 
+        _keys = conf.getInt("keys");
         _interval = conf.getInt("interval");
         _totalOps = conf.getInt("totalOperations");
         _lowerbound = conf.getInt("lowerbound");
@@ -71,7 +85,7 @@ public class ZooKeeperBenchmark {
         _totalTimeSeconds = Math.round((double) totaltime / 1000.0);
         boolean sync = conf.getBoolean("sync");
 
-        _running = new HashMap<Integer,Thread>();
+        _running = new HashMap<Integer,FutureTask<Integer>>();
         _clients = new BenchmarkClient[conf.getInt("clients")];
         _barrier = new CyclicBarrier(_clients.length+1);
         _deadline = totaltime / _interval;
@@ -107,11 +121,11 @@ public class ZooKeeperBenchmark {
          * have already been finished. In this case, the output
          * of read test doesn't reflect the actual rate of
          * read requests. */
-        doTest(TestType.READ, "warm-up");
+        // doTest(TestType.READ, "warm-up");
 
-        doTest(TestType.READ, "znode read"); // Do twice to allow for warm-up
+        // doTest(TestType.READ, "znode read"); // Do twice to allow for warm-up
 
-        doTest(TestType.SETSINGLE, "repeated single-znode write");
+        // doTest(TestType.SETSINGLE, "repeated single-znode write");
 
         doTest(TestType.CREATE, "znode create");
 
@@ -126,26 +140,34 @@ public class ZooKeeperBenchmark {
          * requests would end up not actually deleting anything.
          * Though these requests are sent and processed by
          * zookeeper server anyway, this could still be an issue.*/
-        doTest(TestType.DELETE, "znode delete");
+        // doTest(TestType.DELETE, "znode delete");
 
         LOG.info("Tests completed, now cleaning-up");
 
+        ExecutorService executor = Executors.newFixedThreadPool(_clients.length, new DaemonThreadFactory());
+
         for (int i = 0; i < _clients.length; i++) {
             _clients[i].setTest(TestType.CLEANING);
-            Thread tmp = new Thread(_clients[i]);
+            FutureTask<Integer> tmp = new FutureTask<Integer>(_clients[i], 0);
             _running.put(new Integer(i), tmp);
-            tmp.start();
+            executor.execute(tmp);
         }
 
-        while (!_finished) {
-            synchronized (_running) {
-                try {
-                    _running.wait();
-                } catch (InterruptedException e) {
-                    LOG.warn("Benchmark main thread was interrupted while waiting", e);
-                }
+        for (int i = 0; i < _clients.length; i++) {
+            try {
+                _running.get(i).get();
+            } catch (Exception e) {
+                executor.shutdown();
+                LOG.warn("Error in thread", e);
+                throw new RuntimeException("Interrupted");
             }
         }
+
+        executor.shutdown();
+        if (!_finished) {
+            throw new RuntimeException("Should have finished");
+        }
+
 
         LOG.info("All tests are complete");
     }
@@ -173,15 +195,20 @@ public class ZooKeeperBenchmark {
 
         // Start the testing clients!
 
+        System.out.print("Runnning " + _clients.length + " clients");
+        ExecutorService executor = Executors.newFixedThreadPool(_clients.length, new DaemonThreadFactory());
+
         for (int i = 0; i < _clients.length; i++) {
             _clients[i].setTest(test);
-            Thread tmp = new Thread(_clients[i]);
+            FutureTask<Integer> tmp = new FutureTask<Integer>(_clients[i], 0);
             _running.put(new Integer(i), tmp);
-            tmp.start();
+            executor.execute(tmp);
         }
 
+        System.out.print("Clients started");
         // Wait for clients to connect to their assigned server, and
         // start timer which ensures we have outstanding requests.
+        LOG.info("Waiting for clients to connect");
 
         try {
             _barrier.await();
@@ -191,19 +218,26 @@ public class ZooKeeperBenchmark {
             LOG.warn("Benchmark main thread was interrupted while waiting on barrier", e);
         }
 
+        System.out.print("Done waiting for connections");
+
         Timer timer = new Timer();
         timer.scheduleAtFixedRate(new ResubmitTimer() , _interval, _interval);
 
         // Wait for the test to finish
 
-        while (!_finished) {
-            synchronized (_running) {
-                try {
-                    _running.wait();
-                } catch (InterruptedException e) {
-                    LOG.warn("Benchmark main thread was interrupted while waiting", e);
-                }
+        for (int i = 0; i < _clients.length; i++) {
+            try {
+                _running.get(i).get();
+            } catch (Exception e) {
+                executor.shutdown();
+                LOG.warn("Error in thread", e);
+                throw new RuntimeException("Interrupted");
             }
+        }
+
+        executor.shutdown();
+        if (!_finished) {
+            throw new RuntimeException("Should have finished");
         }
 
         // Test is finished
@@ -247,6 +281,10 @@ public class ZooKeeperBenchmark {
             ret += _clients[i].getOpsCount();
         }
         return ret;
+    }
+
+    long getKeys() {
+        return _keys;
     }
 
     TestType getCurrentTest() {
@@ -313,6 +351,8 @@ public class ZooKeeperBenchmark {
             withRequiredArg().ofType(Boolean.class);
         parser.accepts("clients", "number of clients").
             withRequiredArg().ofType(Integer.class).required();
+        parser.accepts("keys", "number of keys").
+            withRequiredArg().ofType(Integer.class).required();
 
         // Parse and gather the arguments
         try {
@@ -333,6 +373,7 @@ public class ZooKeeperBenchmark {
         Integer time = (Integer) options.valueOf("time");
         Boolean sync = (Boolean) options.valueOf("sync");
         Integer clients = (Integer) options.valueOf("clients");
+        Integer keys = (Integer) options.valueOf("keys");
 
         // Load and parse the configuration file
         String configFile = (String) options.valueOf("conf");
@@ -358,6 +399,7 @@ public class ZooKeeperBenchmark {
             conf.setProperty("sync", sync);
 
         conf.setProperty("clients", clients);
+        conf.setProperty("keys", keys);
 
         return conf;
     }
@@ -378,8 +420,9 @@ public class ZooKeeperBenchmark {
         try {
             ZooKeeperBenchmark benchmark = new ZooKeeperBenchmark(conf);
             benchmark.runBenchmark();
-        } catch (IOException e) {
+        } catch (Exception e) {
             LOG.error("Failed to start ZooKeeper benchmark", e);
+            System.exit(1);
         }
 
         System.exit(0);

@@ -78,8 +78,10 @@ public abstract class BenchmarkClient implements Runnable {
             _zkBenchmark.getBarrier().await();
         } catch (InterruptedException e) {
             LOG.warn("Client #" + _id + " was interrupted while waiting on barrier", e);
+            throw new RuntimeException(e);
         } catch (BrokenBarrierException e) {
             LOG.warn("Some other client was interrupted. Client #" + _id + " is out of sync", e);
+            throw new RuntimeException(e);
         }
 
         _count = 0;
@@ -94,6 +96,7 @@ public abstract class BenchmarkClient implements Runnable {
             }
         } catch (Exception e) {
             LOG.error("Error while creating working directory", e);
+            throw new RuntimeException(e);
         }
 
         // Create a timer to check when we're finished. Schedule it to run
@@ -107,6 +110,7 @@ public abstract class BenchmarkClient implements Runnable {
                                                                         "-" + _type + "_timings.dat")));
         } catch (IOException e) {
             LOG.error("Error while creating output file", e);
+            throw new RuntimeException(e);
         }
 
         // Submit the requests!
@@ -123,6 +127,7 @@ public abstract class BenchmarkClient implements Runnable {
                 _latenciesFile.close();
         } catch (IOException e) {
             LOG.warn("Error while closing output file:", e);
+            throw new RuntimeException(e);
         }
 
         LOG.info("Client #" + _id + " -- Current test complete. " +
