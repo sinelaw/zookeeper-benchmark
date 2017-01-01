@@ -104,28 +104,28 @@ public class SyncBenchmarkClient extends BenchmarkClient {
             if (_syncfin)
                 break;
         }
-        long duration = System.nanoTime() - testStart;
-        int durationSecs = (int)(duration / (1000 * 1000 * 1000)) + 1;
-        long[] avgLatencies = new long[durationSecs];
-        long[] binSizes = new long[durationSecs];
-        for (int i = 0; i < durationSecs; i++) {
-            avgLatencies[i] = 0;
-            binSizes[i] = 0;
-        }
-        for (int i = 0; i < _count; i++) {
-            int sec = (int)((latencies[i].startTime - testStart) / (1000 * 1000 * 1000));
-            avgLatencies[sec] += (latencies[i].endTime - latencies[i].startTime) / 1000; // micros
-            binSizes[sec]++;
-        }
-        for (int i = 0; i < avgLatencies.length; i++) {
-            long res = binSizes[i] == 0 ? 0 : avgLatencies[i]/binSizes[i];
-            try {
-                _latenciesFile.write(Integer.toString(i) + " " + res + "\n");
-            } catch (IOException e) {
-                LOG.error("Exceptions while writing to file", e);
-            }
+        // long duration = System.nanoTime() - testStart;
+        // int durationSecs = (int)(duration / (1000 * 1000 * 1000)) + 1;
+        // long[] avgLatencies = new long[durationSecs];
+        // long[] binSizes = new long[durationSecs];
+        // for (int i = 0; i < durationSecs; i++) {
+        //     avgLatencies[i] = 0;
+        //     binSizes[i] = 0;
+        // }
+        // for (int i = 0; i < _count; i++) {
+        //     int sec = (int)((latencies[i].startTime - testStart) / (1000 * 1000 * 1000));
+        //     avgLatencies[sec] += (latencies[i].endTime - latencies[i].startTime) / 1000; // micros
+        //     binSizes[sec]++;
+        // }
+        // for (int i = 0; i < avgLatencies.length; i++) {
+        //     long res = binSizes[i] == 0 ? 0 : avgLatencies[i]/binSizes[i];
+        //     try {
+        //         _latenciesFile.write(Integer.toString(i) + " " + res + "\n");
+        //     } catch (IOException e) {
+        //         LOG.error("Exceptions while writing to file", e);
+        //     }
 
-        }
+        // }
 
     }
 
