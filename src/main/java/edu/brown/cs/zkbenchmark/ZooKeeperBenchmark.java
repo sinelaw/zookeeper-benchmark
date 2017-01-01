@@ -34,7 +34,6 @@ public class ZooKeeperBenchmark {
     private BenchmarkClient[] _clients;
     private int _interval;
     private HashMap<Integer, FutureTask<Integer>> _running;
-    private AtomicInteger _finishedTotal;
     private int _lastfinished;
     private int _deadline; // in units of "_interval"
     private long _totalTimeSeconds;
@@ -81,7 +80,6 @@ public class ZooKeeperBenchmark {
         _lowerbound = conf.getInt("lowerbound");
         int totaltime = conf.getInt("totalTime");
         _totalTimeSeconds = Math.round((double) totaltime / 1000.0);
-        boolean sync = conf.getBoolean("sync");
 
         _running = new HashMap<Integer,FutureTask<Integer>>();
         _clients = new BenchmarkClient[conf.getInt("clients")];
@@ -89,7 +87,7 @@ public class ZooKeeperBenchmark {
         _deadline = totaltime / _interval;
 
         LOG.info("benchmark set with: interval: " + _interval + " total number: " + _totalOps +
-                 " threshold: " + _lowerbound + " time: " + totaltime + " sync: " + (sync?"SYNC":"ASYNC"));
+                 " threshold: " + _lowerbound + " time: " + totaltime);
 
         _data = "";
 
@@ -101,11 +99,7 @@ public class ZooKeeperBenchmark {
 
         for (int i = 0; i < _clients.length; i++) {
             int server_idx = i % serverList.size();
-            if (sync) {
-                _clients[i] = new SyncBenchmarkClient(this, serverList.get(server_idx), "/zkTest", avgOps, i);
-            } else {
-                _clients[i] = new AsyncBenchmarkClient(this, serverList.get(server_idx), "/zkTest", avgOps, i);
-            }
+            _clients[i] = new SyncBenchmarkClient(this, serverList.get(server_idx), "/zkTest", avgOps, i);
         }
 
     }
@@ -170,7 +164,6 @@ public class ZooKeeperBenchmark {
 
     public void doTest(TestType test, String description, Boolean singleClient) {
         _currentTest = test;
-        _finishedTotal = new AtomicInteger(0);
         _lastfinished = 0;
 
         System.out.print("Running " + description + " benchmark for " + _totalTimeSeconds + " seconds... ");
@@ -242,8 +235,8 @@ public class ZooKeeperBenchmark {
 
         double time = getTime();
         LOG.info(test + " finished, time elapsed (sec): " + time +
-                 " operations: " + _finishedTotal.get() + " avg rate: " +
-                 _finishedTotal.get()/time);
+                 " operations: " + _totalOps + " avg rate: " +
+                 _totalOps/time);
 
         System.out.println("done");
     }
@@ -258,6 +251,10 @@ public class ZooKeeperBenchmark {
         }
 
         return (ret * _interval)/1000.0;
+    }
+
+    int getClients() {
+        return _clients.length;
     }
 
     int getTotalOps() {
@@ -310,8 +307,6 @@ public class ZooKeeperBenchmark {
             withRequiredArg().ofType(Integer.class);
         parser.accepts("time", "time tests will run for (milliseconds)").
             withRequiredArg().ofType(Integer.class);
-        parser.accepts("sync", "sync or async test").
-            withRequiredArg().ofType(Boolean.class);
         parser.accepts("clients", "number of clients").
             withRequiredArg().ofType(Integer.class).required();
         parser.accepts("keys", "number of keys").
@@ -334,7 +329,6 @@ public class ZooKeeperBenchmark {
         Integer totOps = (Integer) options.valueOf("ops");
         Integer lowerbound = (Integer) options.valueOf("lbound");
         Integer time = (Integer) options.valueOf("time");
-        Boolean sync = (Boolean) options.valueOf("sync");
         Integer clients = (Integer) options.valueOf("clients");
         Integer keys = (Integer) options.valueOf("keys");
 
@@ -358,8 +352,6 @@ public class ZooKeeperBenchmark {
             conf.setProperty("lowerbound", lowerbound);
         if (time != null)
             conf.setProperty("totalTime", time);
-        if (sync != null)
-            conf.setProperty("sync", sync);
 
         conf.setProperty("clients", clients);
         conf.setProperty("keys", keys);
