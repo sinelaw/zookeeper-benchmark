@@ -33,14 +33,8 @@ public class ZooKeeperBenchmark {
     private int _lowerbound;
     private BenchmarkClient[] _clients;
     private int _interval;
-    private HashMap<Integer, FutureTask<Integer>> _running;
-    private int _lastfinished;
-    private int _deadline; // in units of "_interval"
-    private long _totalTimeSeconds;
-    private long _lastCpuTime;
-    private long _currentCpuTime;
     private long _startCpuTime;
-    private TestType _currentTest;
+    private HashMap<Integer, FutureTask<Integer>> _running;
     private String _data;
     private BufferedWriter _rateFile;
     private CyclicBarrier _barrier;
@@ -78,16 +72,13 @@ public class ZooKeeperBenchmark {
         _interval = conf.getInt("interval");
         _totalOps = conf.getInt("totalOperations");
         _lowerbound = conf.getInt("lowerbound");
-        int totaltime = conf.getInt("totalTime");
-        _totalTimeSeconds = Math.round((double) totaltime / 1000.0);
 
         _running = new HashMap<Integer,FutureTask<Integer>>();
         _clients = new BenchmarkClient[conf.getInt("clients")];
         _barrier = new CyclicBarrier(_clients.length+1);
-        _deadline = totaltime / _interval;
 
         LOG.info("benchmark set with: interval: " + _interval + " total number: " + _totalOps +
-                 " threshold: " + _lowerbound + " time: " + totaltime);
+                 " threshold: " + _lowerbound);
 
         _data = "";
 
@@ -99,7 +90,7 @@ public class ZooKeeperBenchmark {
 
         for (int i = 0; i < _clients.length; i++) {
             int server_idx = i % serverList.size();
-            _clients[i] = new SyncBenchmarkClient(this, serverList.get(server_idx), "/zkTest", avgOps, i);
+            _clients[i] = new BenchmarkClient(this, serverList.get(server_idx), "/zkTest", avgOps, i);
         }
 
     }
@@ -163,19 +154,13 @@ public class ZooKeeperBenchmark {
     /* This is where each individual test starts */
 
     public void doTest(TestType test, String description, Boolean singleClient) {
-        _currentTest = test;
-        _lastfinished = 0;
-
-        System.out.print("Running " + description + " benchmark for " + _totalTimeSeconds + " seconds... ");
+        System.out.print("Running " + description + " benchmark... ");
 
         try {
             _rateFile = new BufferedWriter(new FileWriter(new File(test+".dat")));
         } catch (IOException e) {
             LOG.error("Unable to create output file", e);
         }
-
-        _startCpuTime = System.nanoTime();
-        _lastCpuTime = _startCpuTime;
 
 
         // Start the testing clients!
@@ -198,6 +183,16 @@ public class ZooKeeperBenchmark {
         // start timer which ensures we have outstanding requests.
         LOG.info("Waiting for clients to connect");
 
+        while (true) {
+            try {
+                Thread.sleep(1000);
+                break;
+            } catch (InterruptedException e) {
+                continue;
+            }
+        }
+
+        _startCpuTime = System.nanoTime();
         try {
             _barrier.await();
         } catch (BrokenBarrierException e) {
@@ -218,13 +213,13 @@ public class ZooKeeperBenchmark {
                 throw new RuntimeException("Interrupted");
             }
         }
+        long endTime = System.nanoTime();
+
+        double time = (endTime - _startCpuTime) / 1000000000.0;
 
         executor.shutdown();
 
         // Test is finished
-
-        _currentTest = TestType.UNDEFINED;
-
         try {
             if (_rateFile != null) {
                 _rateFile.close();
@@ -233,25 +228,12 @@ public class ZooKeeperBenchmark {
             LOG.warn("Error while closing output file", e);
         }
 
-        double time = getTime();
         LOG.info(test + " finished, time elapsed (sec): " + time +
                  " operations: " + _totalOps + " avg rate: " +
                  _totalOps/time);
 
         System.out.println("clients,keys,throughput\n");
         System.out.println("" + getClients() + ","  + getKeys() + "," + _totalOps/time);
-    }
-
-    /* return the max time consumed by each thread */
-    double getTime() {
-        double ret = 0;
-
-        for (int i = 0; i < _clients.length; i++) {
-            if (ret < _clients[i].getTimeCount())
-                ret = _clients[i].getTimeCount();
-        }
-
-        return (ret * _interval)/1000.0;
     }
 
     int getClients() {
@@ -266,20 +248,12 @@ public class ZooKeeperBenchmark {
         return _keys;
     }
 
-    TestType getCurrentTest() {
-        return _currentTest;
-    }
-
     CyclicBarrier getBarrier() {
         return _barrier;
     }
 
     String getData() {
         return _data;
-    }
-
-    int getDeadline() {
-        return _deadline;
     }
 
     int getInterval() {
@@ -351,8 +325,6 @@ public class ZooKeeperBenchmark {
             conf.setProperty("totalOperations", totOps);
         if (lowerbound != null)
             conf.setProperty("lowerbound", lowerbound);
-        if (time != null)
-            conf.setProperty("totalTime", time);
 
         conf.setProperty("clients", clients);
         conf.setProperty("keys", keys);

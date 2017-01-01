@@ -12,10 +12,12 @@ import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.BrokenBarrierException;
+import java.util.Random;
 
 import org.apache.zookeeper.data.Stat;
 import org.apache.log4j.Logger;
 
+import org.apache.zookeeper.KeeperException.NoNodeException;
 import com.netflix.curator.framework.CuratorFramework;
 import com.netflix.curator.framework.CuratorFrameworkFactory;
 import com.netflix.curator.framework.api.CuratorEvent;
@@ -23,7 +25,7 @@ import com.netflix.curator.retry.RetryNTimes;
 
 import edu.brown.cs.zkbenchmark.ZooKeeperBenchmark.TestType;
 
-public abstract class BenchmarkClient implements Runnable {
+public class BenchmarkClient implements Runnable {
     protected ZooKeeperBenchmark _zkBenchmark;
     protected String _host; // the host this client is connecting to
     protected CuratorFramework _client; // the actual client
@@ -84,6 +86,11 @@ public abstract class BenchmarkClient implements Runnable {
             throw new RuntimeException(e);
         }
 
+        if (_type == TestType.CREATE) {
+            doCreate();
+            return;
+        }
+
         _count = 0;
         _countTime = 0;
 
@@ -101,52 +108,36 @@ public abstract class BenchmarkClient implements Runnable {
 
         // Create a timer to check when we're finished. Schedule it to run
         // periodically in case we want to record periodic statistics
-
-        int interval = _zkBenchmark.getInterval();
-        _timer.scheduleAtFixedRate(new FinishTimer(), interval, interval);
-
-        try {
-            _latenciesFile = new BufferedWriter(new FileWriter(new File(_id +
-                                                                        "-" + _type + "_timings.dat")));
-        } catch (IOException e) {
-            LOG.error("Error while creating output file", e);
-            throw new RuntimeException(e);
-        }
-
         // Submit the requests!
 
         submit(_attempts, _type);
 
+
+        // try {
+        //     _latenciesFile = new BufferedWriter(new FileWriter(new File(_id +
+        //                                                                 "-" + _type + "_timings.dat")));
+        // } catch (IOException e) {
+        //     LOG.error("Error while creating output file", e);
+        //     throw new RuntimeException(e);
+        // }
+
+
         // Test is complete. Print some stats and go home.
 
-        zkAdminCommand("stat");
+        // zkAdminCommand("stat");
 
 
-        try {
-            if (_latenciesFile != null)
-                _latenciesFile.close();
-        } catch (IOException e) {
-            LOG.warn("Error while closing output file:", e);
-            throw new RuntimeException(e);
-        }
+        // try {
+        //     if (_latenciesFile != null)
+        //         _latenciesFile.close();
+        // } catch (IOException e) {
+        //     LOG.warn("Error while closing output file:", e);
+        //     throw new RuntimeException(e);
+        // }
 
-        LOG.info("Client #" + _id + " -- Current test complete. " +
-                 "Completed " + _count + " operations.");
+        // LOG.info("Client #" + _id + " -- Current test complete. " +
+        //          "Completed " + _count + " operations.");
 
-    }
-
-    class FinishTimer extends TimerTask {
-        @Override
-        public void run() {
-            //this can be used to measure rate of each thread
-            //at this moment, it is not necessary
-            _countTime++;
-
-            if (_countTime == _zkBenchmark.getDeadline()) {
-                this.cancel();
-                finish();
-            }
-        }
     }
 
     void doCleaning() {
@@ -220,10 +211,6 @@ public abstract class BenchmarkClient implements Runnable {
         }
     }
 
-    int getTimeCount() {
-        return _countTime;
-    }
-
     int getOpsCount(){
         return _count;
     }
@@ -236,7 +223,103 @@ public abstract class BenchmarkClient implements Runnable {
         _type = type;
     }
 
-    abstract protected void submit(int n, TestType type);
+    protected void submit(int n, TestType type) {
+        try {
+            submitWrapped(n, type);
+        } catch (Exception e) {
+            // What can you do? for some reason
+            // com.netflix.curator.framework.api.Pathable.forPath() throws Exception
+            LOG.error("Error while submitting requests", e);
+            throw new RuntimeException(e);
+        }
+    }
 
-    abstract protected void finish();
+    class OpTime {
+        public long startTime;
+        public long endTime;
+        public OpTime(long s, long e) {
+            startTime = s;
+            endTime = e;
+        }
+    };
+
+    protected void doCreate() {
+        try {
+            for (int i = 0; i < _zkBenchmark.getKeys(); i++) {
+                byte data[] = new String(_zkBenchmark.getData() + i).getBytes();
+                try {
+                    _client.delete().forPath("/" + i);
+                } catch (NoNodeException e) {
+                    // ignore
+                }
+                _client.create().forPath("/" + i, data);
+            }
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    protected void submitWrapped(int n, TestType type) throws Exception {
+        byte data[];
+
+        LOG.debug("Starting job");
+        long testStart = System.nanoTime();
+        Random random = new Random();
+        OpTime[] latencies = new OpTime[1000 * 1000];
+        int ops_per_client = _zkBenchmark.getTotalOps() / _zkBenchmark.getClients();
+        int ops = ops_per_client;
+        for (int i = 0; i < ops; i++) {
+            long submitTime = System.nanoTime();
+
+            switch (type) {
+            case READ:
+                _client.getData().forPath(_path);
+                break;
+
+            case SETSINGLE:
+                data = new String(_zkBenchmark.getData() + i).getBytes();
+                _client.setData().forPath("/singleKey", data);
+                break;
+
+            case SETMULTI:
+                long key = random.nextInt(_zkBenchmark.getKeys());
+                data = new String(_zkBenchmark.getData() + key).getBytes();
+                _client.setData().forPath("/" + key, data);
+                break;
+
+            case CREATE:
+            case DELETE:
+            default:
+                throw new RuntimeException("Not expecting: " + type);
+            }
+
+            long endTime = System.nanoTime();
+            latencies[i] = new OpTime(submitTime, endTime);
+            _count++;
+
+        }
+        // long duration = System.nanoTime() - testStart;
+        // int durationSecs = (int)(duration / (1000 * 1000 * 1000)) + 1;
+        // long[] avgLatencies = new long[durationSecs];
+        // long[] binSizes = new long[durationSecs];
+        // for (int i = 0; i < durationSecs; i++) {
+        //     avgLatencies[i] = 0;
+        //     binSizes[i] = 0;
+        // }
+        // for (int i = 0; i < _count; i++) {
+        //     int sec = (int)((latencies[i].startTime - testStart) / (1000 * 1000 * 1000));
+        //     avgLatencies[sec] += (latencies[i].endTime - latencies[i].startTime) / 1000; // micros
+        //     binSizes[sec]++;
+        // }
+        // for (int i = 0; i < avgLatencies.length; i++) {
+        //     long res = binSizes[i] == 0 ? 0 : avgLatencies[i]/binSizes[i];
+        //     try {
+        //         _latenciesFile.write(Integer.toString(i) + " " + res + "\n");
+        //     } catch (IOException e) {
+        //         LOG.error("Exceptions while writing to file", e);
+        //     }
+
+        // }
+
+    }
 }
