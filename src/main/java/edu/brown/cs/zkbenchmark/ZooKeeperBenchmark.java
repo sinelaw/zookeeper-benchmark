@@ -181,7 +181,7 @@ public class ZooKeeperBenchmark {
                 if (result.latencies.length != opsPerClient) {
                     throw new RuntimeException("Expecting exactly this amount of results per client: " + opsPerClient);
                 }
-                int second = (int)(result.latencies[j].endTime / 1000000000);
+                int second = (int)((result.latencies[j].endTime - _startCpuTime) / 1000000000);
                 opsPerSecond[second] += 1;
                 long curLatency = result.latencies[j].endTime - result.latencies[j].startTime;
                 latencyPerSecondMicros[second] += curLatency / 1000; // micros
@@ -199,7 +199,7 @@ public class ZooKeeperBenchmark {
 
         long averageThroughput = 0;
         System.out.println("\n");
-        System.out.println("second,throughput,latency");
+        System.out.println("second,throughput,latency_micro");
         for (int i = 1; i < opsPerSecond.length - 2; i++) {
             averageThroughput += opsPerSecond[i];
             System.out.println("" + i + "," + opsPerSecond[i] + "," + latencyPerSecondMicros[i]/opsPerSecond[i]);
